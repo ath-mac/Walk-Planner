@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Walk Planner">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Walk Planner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+:root{
+  --ink:#1F2A24; --muted:#5E6B63; --surface:#FFFFFF; --wash:#EEF2EC;
+  --line:#D5DDD6; --eucalypt:#3E6B57; --eucalypt-ink:#FFFFFF; --warn:#A33A2B;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#E6ECE7; --muted:#9FAEA5; --surface:#18201C; --wash:#222C27;
+    --line:#34413A; --eucalypt:#7FB79B; --eucalypt-ink:#10201A; --warn:#F08A78;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font-family:"Atkinson Hyperlegible",-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:var(--surface);-webkit-tap-highlight-color:transparent}
+#app{display:grid;grid-template-columns:360px 1fr;height:100%}
+#panel{background:var(--surface);border-right:1px solid var(--line);overflow-y:auto;
+  padding:calc(16px + env(safe-area-inset-top,0px)) 20px calc(20px + env(safe-area-inset-bottom,0px)) calc(20px + env(safe-area-inset-left,0px));
+  display:flex;flex-direction:column;gap:18px}
+#map{height:100%;width:100%}
+@media (max-width:760px){
+  #app{grid-template-columns:1fr;grid-template-rows:1fr auto}
+  #panel{order:2;max-height:48vh;border-right:0;border-top:1px solid var(--line);
+    padding:14px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+}
+header{display:flex;align-items:center;justify-content:space-between}
+h1{font-size:1.5rem;margin:0;letter-spacing:-.01em}
+h2{font-size:1rem;margin:0 0 8px}
+p{margin:0;line-height:1.45}
+.hint{color:var(--muted);font-size:.95rem}
+button,.btn{font:inherit;font-size:1rem;border-radius:10px;border:1px solid var(--line);background:var(--wash);color:var(--ink);
+  padding:11px 14px;min-height:44px;cursor:pointer}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--eucalypt);outline-offset:2px}
+button.primary{background:var(--eucalypt);color:var(--eucalypt-ink);border-color:var(--eucalypt);font-weight:700;width:100%}
+button:disabled{opacity:.5;cursor:default}
+button.icon{padding:8px 12px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;background:var(--wash);border-radius:12px;padding:4px;gap:4px}
+.tabs button{border:0;background:transparent}
+.tabs button[aria-selected="true"]{background:var(--surface);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+section[hidden]{display:none}
+section{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row > *{flex:1}
+.dist{display:flex;justify-content:space-between;align-items:baseline}
+.dist output{font-size:2rem;font-weight:700;letter-spacing:-.02em}
+input[type=range]{width:100%;accent-color:var(--eucalypt);height:32px}
+.toggle{display:flex;align-items:center;gap:10px;font-size:1rem}
+.toggle input{width:22px;height:22px;accent-color:var(--eucalypt)}
+.opts{display:flex;flex-direction:column;gap:8px}
+.opt{display:grid;grid-template-columns:14px 1fr auto;align-items:center;gap:12px;text-align:left;background:var(--surface)}
+.opt[aria-pressed="true"]{border-color:var(--ink);border-width:2px;padding:10px 13px}
+.swatch{width:14px;height:14px;border-radius:50%}
+.opt .km{font-weight:700;font-size:1.1rem}
+.opt .sub{color:var(--muted);font-size:.9rem}
+.stat{font-size:2rem;font-weight:700;letter-spacing:-.02em}
+#status{font-size:.95rem;color:var(--muted);min-height:1.4em}
+#status.err{color:var(--warn)}
+details summary{cursor:pointer;font-weight:700;padding:6px 0;min-height:44px;display:flex;align-items:center}
+.saved{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.saved li{display:flex;gap:6px}
+.saved li button:first-child{flex:1;text-align:left}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);max-width:min(440px,92vw);padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog input[type=text]{width:100%;font:inherit;font-size:1rem;padding:11px;border-radius:10px;border:1px solid var(--line);background:var(--wash);color:var(--ink);margin:10px 0}
+dialog a{color:var(--eucalypt)}
+button[aria-pressed="true"].live{background:#2E7DD1;border-color:#2E7DD1;color:#fff;font-weight:700}
+.diag{margin:12px 0;padding:12px;border-radius:10px;background:var(--wash);font-size:.92rem;line-height:1.5;white-space:pre-wrap;max-height:40vh;overflow:auto}
+.diag:empty{display:none}
+.me-dot{width:18px;height:18px;border-radius:50%;background:#2E7DD1;border:3px solid #fff;box-shadow:0 0 0 2px rgba(46,125,209,.35),0 1px 4px rgba(0,0,0,.4)}
+.start-pin{width:22px;height:22px;border-radius:50%;background:var(--eucalypt);border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+.leaflet-container{font-family:inherit}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="panel">
+    <header>
+      <h1>Walk Planner</h1>
+      <button class="icon" id="settingsBtn" aria-label="Settings">Settings</button>
+    </header>
+
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="loop">Find a loop</button>
+      <button role="tab" aria-selected="false" data-tab="draw">Draw a path</button>
+    </div>
+
+    <section id="tab-loop">
+      <p class="hint">Tap the map to set where the walk starts and finishes.</p>
+      <button id="locateBtn">Start from my location</button>
+      <div>
+        <div class="dist"><h2>Distance</h2><output id="distOut">5.0 km</output></div>
+        <input type="range" id="distIn" min="1" max="25" step="0.5" value="5" aria-label="Target distance in kilometres">
+      </div>
+      <button class="primary" id="findBtn">Find loops</button>
+      <div class="opts" id="opts"></div>
+    </section>
+
+    <section id="tab-draw" hidden>
+      <p class="hint">Tap the map to add points along your walk.</p>
+      <label class="toggle"><input type="checkbox" id="followIn" checked> Follow streets and paths</label>
+      <div class="stat" id="drawDist">0.00 km</div>
+      <div class="row">
+        <button id="undoBtn">Undo</button>
+        <button id="closeBtn">Back to start</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+    </section>
+
+    <div class="row">
+      <button class="live" id="liveBtn" aria-pressed="false">Show my position</button>
+      <button class="live" id="followBtn" aria-pressed="false" disabled>Follow me</button>
+    </div>
+
+    <div class="row">
+      <button id="saveBtn" disabled>Save route</button>
+      <button id="gpxBtn" disabled>Export GPX</button>
+    </div>
+    <p id="status" role="status"></p>
+
+    <details id="savedBox">
+      <summary>Saved routes</summary>
+      <ul class="saved" id="savedList"></ul>
+    </details>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<dialog id="settings">
+  <h2>OpenRouteService key</h2>
+  <p class="hint">Route planning uses OpenRouteService. Get a free key at <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener">openrouteservice.org</a>, then paste it here. It's stored only on this device.</p>
+  <input type="text" id="keyIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste your key">
+  <div class="row"><button id="keyCancel">Cancel</button><button class="primary" id="keySave">Save key</button></div>
+  <h2 style="margin-top:22px">Location check</h2>
+  <p class="hint">Tests each step location needs and says which one is failing.</p>
+  <div class="diag" id="diagOut"></div>
+  <div class="row"><button id="diagBtn">Run location check</button><button id="diagCopy" disabled>Copy results</button></div>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const ORS = 'https://api.openrouteservice.org/v2/directions/foot-walking/geojson';
+const COLORS = ['#D99A1E', '#C2185B', '#2E7DD1'];
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+let apiKey = store.get('orsKey', '');
+let mode = 'loop';
+let start = null, startMarker = null;
+let loopRoutes = [], loopLayers = [], selected = -1;
+let drawPts = [], drawMarkers = [], drawLine = null, drawRoute = null;
+let current = null; // {coords:[[lat,lng,ele?]], dist, ascent}
+
+const map = L.map('map', { zoomControl:false }).setView(store.get('lastView', [-32.05, 115.86]), 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+}).addTo(map);
+L.control.zoom({ position:'topright' }).addTo(map);
+map.on('moveend', () => { const c = map.getCenter(); store.set('lastView', [c.lat, c.lng]); });
+
+function status(msg, err){ const s = $('#status'); s.textContent = msg || ''; s.classList.toggle('err', !!err); }
+const km = m => (m / 1000).toFixed(2) + ' km';
+const mins = s => { const m = Math.round(s / 60); return m < 60 ? m + ' min' : Math.floor(m/60) + ' h ' + (m%60) + ' min'; };
+
+function setCurrent(r){
+  current = r;
+  $('#saveBtn').disabled = $('#gpxBtn').disabled = !r;
+}
+
+async function ors(body){
+  if(!apiKey){ openSettings(); throw new Error('Add your OpenRouteService key to plan routes.'); }
+  const res = await fetch(ORS, { method:'POST', headers:{ 'Authorization':apiKey, 'Content-Type':'application/json' }, body:JSON.stringify(body) });
+  if(!res.ok){
+    if(res.status === 401 || res.status === 403) throw new Error('Your API key was not accepted. Check it in Settings.');
+    if(res.status === 429) throw new Error('Too many requests for now. Wait a minute and try again.');
+    let detail = ''; try{ detail = (await res.json()).error?.message || ''; }catch(e){}
+    if(/routable point|could not find/i.test(detail)) throw new Error('No walkable path near that point. Move it onto a street or path.');
+    throw new Error(detail || 'Route request failed (' + res.status + ').');
+  }
+  const f = (await res.json()).features[0];
+  return {
+    coords: f.geometry.coordinates.map(c => [c[1], c[0], c[2]]),
+    dist: f.properties.summary.distance,
+    time: f.properties.summary.duration,
+    ascent: f.properties.ascent || 0
+  };
+}
+
+/* ---------- Loop mode ---------- */
+function setStart(latlng){
+  start = latlng;
+  if(!startMarker){
+    startMarker = L.marker(latlng, { draggable:true, icon:L.divIcon({ className:'', html:'<div class="start-pin"></div>', iconSize:[22,22], iconAnchor:[11,11] }) }).addTo(map);
+    startMarker.on('dragend', e => { start = e.target.getLatLng(); clearLoops(); status('Start moved. Tap Find loops.'); });
+  } else startMarker.setLatLng(latlng);
+  clearLoops();
+  status('Start set. Choose a distance and tap Find loops.');
+}
+
+function clearLoops(){
+  loopLayers.forEach(l => map.removeLayer(l));
+  loopLayers = []; loopRoutes = []; selected = -1;
+  $('#opts').innerHTML = '';
+  if(mode === 'loop') setCurrent(null);
+}
+
+async function findLoop(target, seed){
+  let len = target, r;
+  for(let i = 0; i < 3; i++){ // nudge requested length until within 8% of target
+    r = await ors({ coordinates:[[start.lng, start.lat]], elevation:true,
+      options:{ round_trip:{ length:Math.round(len), points:4, seed } } });
+    if(Math.abs(r.dist - target) / target < 0.08) break;
+    len = len * target / r.dist;
+  }
+  return r;
+}
+
+async function findLoops(){
+  if(!start){ status('Tap the map to set a start point first.', true); return; }
+  const target = parseFloat($('#distIn').value) * 1000;
+  clearLoops();
+  $('#findBtn').disabled = true; status('Finding loops…');
+  const seeds = [1, 2, 3].map(n => n + Math.floor(Math.random() * 90));
+  const results = await Promise.allSettled(seeds.map(s => findLoop(target, s)));
+  $('#findBtn').disabled = false;
+  const ok = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+  if(!ok.length){ status(results[0].reason.message, true); return; }
+  loopRoutes = ok;
+  ok.forEach((r, i) => {
+    const line = L.polyline(r.coords.map(c => [c[0], c[1]]), { color:COLORS[i], weight:5, opacity:.55 }).addTo(map);
+    line.on('click', () => selectLoop(i));
+    loopLayers.push(line);
+    const b = document.createElement('button');
+    b.className = 'opt'; b.setAttribute('aria-pressed', 'false');
+    b.innerHTML = `<span class="swatch" style="background:${COLORS[i]}"></span>
+      <span><span class="km">${km(r.dist)}</span><br><span class="sub">About ${mins(r.time)} · ${Math.round(r.ascent)} m climb</span></span>
+      <span class="sub">Option ${i+1}</span>`;
+    b.onclick = () => selectLoop(i);
+    $('#opts').appendChild(b);
+  });
+  map.fitBounds(L.featureGroup(loopLayers).getBounds(), { padding:[30,30] });
+  selectLoop(0);
+  status(ok.length < 3 ? 'Some options could not be planned. Showing what was found.' : 'Tap an option to highlight it. Tap Find loops again for different routes.');
+}
+
+function selectLoop(i){
+  selected = i;
+  loopLayers.forEach((l, j) => { l.setStyle({ opacity: j === i ? 1 : .35, weight: j === i ? 7 : 4 }); if(j === i) l.bringToFront(); });
+  document.querySelectorAll('.opt').forEach((b, j) => b.setAttribute('aria-pressed', j === i));
+  setCurrent(loopRoutes[i]);
+}
+
+$('#distIn').oninput = e => $('#distOut').textContent = parseFloat(e.target.value).toFixed(1) + ' km';
+$('#findBtn').onclick = findLoops;
+/* ---------- Location: one-off fix with fallback ---------- */
+const GEO_ERR = {
+  1: 'Permission denied. iPadOS or Safari is refusing location for this page.',
+  2: 'Position unavailable. The iPad could not work out where it is (no GPS fix and no Wi-Fi positioning).',
+  3: 'Timed out waiting for a position.'
+};
+function getFix(){
+  // Try high accuracy first, then fall back to Wi-Fi/network accuracy with a cached fix allowed.
+  return new Promise((resolve, reject) => {
+    if(!navigator.geolocation) return reject({ code:0, message:'Geolocation not supported' });
+    navigator.geolocation.getCurrentPosition(resolve, err => {
+      if(err.code === 1) return reject(err);
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy:false, timeout:20000, maximumAge:120000 });
+    }, { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+  });
+}
+$('#locateBtn').onclick = async () => {
+  if(lastFix){ const ll = L.latLng(lastFix.latitude, lastFix.longitude); map.setView(ll, 16); setStart(ll); return; }
+  status('Finding your location…');
+  try{
+    const p = await getFix();
+    const ll = L.latLng(p.coords.latitude, p.coords.longitude);
+    map.setView(ll, 16); setStart(ll);
+  }catch(e){
+    status((GEO_ERR[e.code] || e.message) + ' Run Location check in Settings, or tap the map instead.', true);
+  }
+};
+
+/* ---------- Live position ---------- */
+let watchId = null, lastFix = null, meMarker = null, meCircle = null, following = false;
+function updateMe(p){
+  lastFix = p.coords;
+  const ll = [p.coords.latitude, p.coords.longitude];
+  if(!meMarker){
+    meCircle = L.circle(ll, { radius:p.coords.accuracy, color:'#2E7DD1', weight:1, fillOpacity:.12, interactive:false }).addTo(map);
+    meMarker = L.marker(ll, { interactive:false, icon:L.divIcon({ className:'', html:'<div class="me-dot"></div>', iconSize:[18,18], iconAnchor:[9,9] }) }).addTo(map);
+    map.setView(ll, Math.max(map.getZoom(), 16));
+  } else {
+    meMarker.setLatLng(ll); meCircle.setLatLng(ll).setRadius(p.coords.accuracy);
+  }
+  if(following) map.panTo(ll, { animate:true });
+  const acc = Math.round(p.coords.accuracy);
+  status(acc > 100 ? `Live position on, but only accurate to about ${acc} m. This iPad may be using Wi-Fi rather than GPS.` : `Live position on (±${acc} m).`);
+}
+function startLive(){
+  if(!navigator.geolocation){ status('Location is not supported in this browser.', true); return; }
+  status('Starting live position…');
+  watchId = navigator.geolocation.watchPosition(updateMe, err => {
+    if(err.code === 3 && lastFix) return; // a slow update while already tracking is fine
+    status((GEO_ERR[err.code] || err.message) + ' Run Location check in Settings for details.', true);
+    if(err.code === 1) stopLive();
+  }, { enableHighAccuracy:true, maximumAge:5000, timeout:30000 });
+  $('#liveBtn').setAttribute('aria-pressed', 'true'); $('#liveBtn').textContent = 'Hide my position';
+  $('#followBtn').disabled = false;
+}
+function stopLive(){
+  if(watchId !== null) navigator.geolocation.clearWatch(watchId);
+  watchId = null;
+  [meMarker, meCircle].forEach(l => l && map.removeLayer(l)); meMarker = meCircle = null;
+  setFollow(false);
+  $('#liveBtn').setAttribute('aria-pressed', 'false'); $('#liveBtn').textContent = 'Show my position';
+  $('#followBtn').disabled = true;
+}
+function setFollow(on){
+  following = on;
+  $('#followBtn').setAttribute('aria-pressed', on);
+  if(on && lastFix) map.panTo([lastFix.latitude, lastFix.longitude]);
+}
+$('#liveBtn').onclick = () => watchId === null ? startLive() : stopLive();
+$('#followBtn').onclick = () => setFollow(!following);
+map.on('dragstart', () => { if(following){ setFollow(false); status('Stopped following. Tap Follow me to recentre.'); } });
+// iPadOS pauses location for backgrounded web apps; restart the watch when the app comes back.
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; startLive(); }
+});
+
+/* ---------- Location check ---------- */
+async function runDiag(){
+  const out = $('#diagOut'), lines = [];
+  const log = s => { lines.push(s); out.textContent = lines.join('\n'); };
+  out.textContent = ''; $('#diagCopy').disabled = true;
+  const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  log(`Address: ${location.protocol}//${location.host || '(local file)'}`);
+  log(`Secure (https): ${window.isSecureContext ? 'yes' : 'NO. Location only works over https.'}`);
+  log(`Opened from: ${standalone ? 'Home Screen app' : 'Safari tab'}`);
+  log(`Device: ${navigator.userAgent.match(/\(([^)]+)\)/)?.[1] || 'unknown'}`);
+  log(`Location supported: ${'geolocation' in navigator ? 'yes' : 'NO'}`);
+  try{
+    const perm = await navigator.permissions.query({ name:'geolocation' });
+    log(`Permission state: ${perm.state}${perm.state === 'denied' ? '. Blocked; see advice below.' : ''}`);
+  }catch(e){ log('Permission state: not reported by this iPadOS version'); }
+  if(!('geolocation' in navigator) || !window.isSecureContext){ log('\nResult: fix the items marked NO first.'); $('#diagCopy').disabled = false; return; }
+
+  const attempt = (label, opts) => new Promise(res => {
+    const t0 = performance.now();
+    log(`\n${label}…`);
+    navigator.geolocation.getCurrentPosition(
+      p => res({ ok:true, p, ms:performance.now() - t0 }),
+      e => res({ ok:false, e, ms:performance.now() - t0 }), opts);
+  });
+  const hi = await attempt('Test 1: GPS-quality fix (up to 20 s)', { enableHighAccuracy:true, timeout:20000, maximumAge:0 });
+  report(hi, log);
+  let lo = hi;
+  if(!hi.ok && hi.e.code !== 1){
+    lo = await attempt('Test 2: Wi-Fi/network fix (up to 20 s)', { enableHighAccuracy:false, timeout:20000, maximumAge:300000 });
+    report(lo, log);
+  }
+  log('\n' + advice(hi, lo, standalone));
+  $('#diagCopy').disabled = false;
+}
+function report(r, log){
+  if(r.ok){
+    const c = r.p.coords;
+    log(`  OK in ${(r.ms/1000).toFixed(1)} s, accurate to ±${Math.round(c.accuracy)} m${c.altitude != null ? ', altitude available (GPS likely)' : ', no altitude (Wi-Fi positioning likely)'}`);
+  } else log(`  Failed after ${(r.ms/1000).toFixed(1)} s: code ${r.e.code}. ${GEO_ERR[r.e.code] || r.e.message}`);
+}
+function advice(hi, lo, standalone){
+  const r = hi.ok ? hi : lo;
+  if(r.ok && r.p.coords.accuracy <= 100) return 'Result: location works. If live tracking still stalls, keep the app on screen; iPadOS pauses web apps in the background or when the screen locks.';
+  if(r.ok) return 'Result: location works but is coarse. This is typical of a Wi-Fi-only iPad, which has no GPS chip. Away from Wi-Fi, live tracking will be patchy or stop. A cellular iPad, or sharing location from an iPhone, is needed for walking outdoors.';
+  if(r.e.code === 1 && hi.ms < 1500) return 'Result: blocked instantly without a prompt, so a setting is refusing it before you are asked. Check Safari > Location is not "Deny", then in Safari tap aA > Website Settings > Location > Ask. Also check Screen Time > Content & Privacy > Location Services and any work device profile.' + (standalone ? ' Home Screen apps keep their own permission: delete the icon, allow location in a Safari tab first, then re-add it.' : '');
+  if(r.e.code === 1) return 'Result: permission denied after asking. Choose Allow when the prompt appears, or reset as described above.';
+  if(r.e.code === 2) return 'Result: permission is fine but the iPad cannot find itself. Turn Wi-Fi on (even if not connected), and check Settings > Privacy & Security > Location Services > System Services > Networking & Wireless is on.';
+  return 'Result: permission is fine but no fix arrived in time. Try outdoors or near a window. A Wi-Fi-only iPad needs Wi-Fi switched on to locate itself.';
+}
+$('#diagBtn').onclick = runDiag;
+$('#diagCopy').onclick = async () => {
+  try{ await navigator.clipboard.writeText($('#diagOut').textContent); $('#diagCopy').textContent = 'Copied'; }
+  catch(e){ $('#diagCopy').textContent = 'Select the text to copy'; }
+  setTimeout(() => $('#diagCopy').textContent = 'Copy results', 2000);
+};
+
+/* ---------- Draw mode ---------- */
+let drawTimer;
+function redraw(){
+  clearTimeout(drawTimer);
+  drawTimer = setTimeout(async () => {
+    if(drawLine){ map.removeLayer(drawLine); drawLine = null; }
+    if(drawPts.length < 2){ $('#drawDist').textContent = km(0); setCurrent(null); return; }
+    let r;
+    if($('#followIn').checked){
+      status('Snapping to paths…');
+      try{
+        r = await ors({ coordinates:drawPts.map(p => [p.lng, p.lat]), elevation:true });
+        status('');
+      }catch(e){ status(e.message + ' Showing straight lines.', true); }
+    }
+    if(!r){
+      let d = 0; for(let i = 1; i < drawPts.length; i++) d += map.distance(drawPts[i-1], drawPts[i]);
+      r = { coords:drawPts.map(p => [p.lat, p.lng]), dist:d, time:d / 1.39, ascent:0 };
+    }
+    drawRoute = r;
+    drawLine = L.polyline(r.coords.map(c => [c[0], c[1]]), { color:'#2E7DD1', weight:6 }).addTo(map);
+    $('#drawDist').textContent = km(r.dist);
+    setCurrent(r);
+  }, 250);
+}
+function addDrawPt(ll){
+  drawPts.push(ll);
+  drawMarkers.push(L.circleMarker(ll, { radius:7, color:'#fff', weight:2, fillColor:'#2E7DD1', fillOpacity:1 }).addTo(map));
+  redraw();
+}
+$('#undoBtn').onclick = () => { if(!drawPts.length) return; drawPts.pop(); map.removeLayer(drawMarkers.pop()); redraw(); };
+$('#closeBtn').onclick = () => { if(drawPts.length > 1) addDrawPt(drawPts[0]); };
+$('#clearBtn').onclick = () => { drawPts = []; drawMarkers.forEach(m => map.removeLayer(m)); drawMarkers = []; redraw(); };
+$('#followIn').onchange = redraw;
+
+/* ---------- Tabs and map taps ---------- */
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
+  mode = b.dataset.tab;
+  document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', x === b));
+  $('#tab-loop').hidden = mode !== 'loop';
+  $('#tab-draw').hidden = mode !== 'draw';
+  setCurrent(mode === 'loop' ? (loopRoutes[selected] || null) : (drawPts.length > 1 ? drawRoute : null));
+  status('');
+});
+map.on('click', e => mode === 'loop' ? setStart(e.latlng) : addDrawPt(e.latlng));
+
+/* ---------- Save, GPX, saved list ---------- */
+let viewLayer = null;
+function renderSaved(){
+  const list = store.get('routes', []);
+  $('#savedList').innerHTML = list.length ? '' : '<li class="hint">No saved routes yet.</li>';
+  list.forEach((r, i) => {
+    const li = document.createElement('li');
+    const show = document.createElement('button');
+    show.textContent = `${r.name} (${km(r.dist)})`;
+    show.onclick = () => {
+      if(viewLayer) map.removeLayer(viewLayer);
+      viewLayer = L.polyline(r.coords.map(c => [c[0], c[1]]), { color:'#3E6B57', weight:6, dashArray:'2 10', lineCap:'round' }).addTo(map);
+      map.fitBounds(viewLayer.getBounds(), { padding:[30,30] });
+      setCurrent(r); status(`Showing “${r.name}”.`);
+    };
+    const del = document.createElement('button');
+    del.textContent = 'Delete'; del.setAttribute('aria-label', 'Delete ' + r.name);
+    del.onclick = () => { if(!confirm(`Delete “${r.name}”?`)) return; list.splice(i, 1); store.set('routes', list); renderSaved(); };
+    li.append(show, del); $('#savedList').appendChild(li);
+  });
+}
+$('#saveBtn').onclick = () => {
+  if(!current) return;
+  const name = prompt('Name this route', 'Walk ' + new Date().toLocaleDateString('en-AU'));
+  if(!name) return;
+  const list = store.get('routes', []);
+  list.unshift({ name, coords:current.coords, dist:current.dist, ascent:current.ascent, saved:Date.now() });
+  store.set('routes', list); renderSaved(); $('#savedBox').open = true;
+  status(`Saved “${name}”.`);
+};
+$('#gpxBtn').onclick = () => {
+  if(!current) return;
+  const pts = current.coords.map(c => `<trkpt lat="${c[0].toFixed(6)}" lon="${c[1].toFixed(6)}">${c[2] != null ? `<ele>${c[2]}</ele>` : ''}</trkpt>`).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Walk Planner" xmlns="http://www.topografix.com/GPX/1/1">\n<trk><name>Walk ${km(current.dist)}</name><trkseg>\n${pts}\n</trkseg></trk>\n</gpx>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([gpx], { type:'application/gpx+xml' }));
+  a.download = 'walk-' + (current.dist / 1000).toFixed(1) + 'km.gpx';
+  document.body.appendChild(a); a.click(); a.remove();
+  status('GPX exported.');
+};
+
+/* ---------- Settings ---------- */
+function openSettings(){ $('#keyIn').value = apiKey; $('#settings').showModal(); }
+$('#settingsBtn').onclick = openSettings;
+$('#keyCancel').onclick = () => $('#settings').close();
+$('#keySave').onclick = () => { apiKey = $('#keyIn').value.trim(); store.set('orsKey', apiKey); $('#settings').close(); status(apiKey ? 'Key saved.' : 'Key removed.'); };
+
+renderSaved();
+if(!apiKey) status('Add your free OpenRouteService key in Settings to start planning.');
+</script>
+</body>
+</html>
